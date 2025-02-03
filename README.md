@@ -56,3 +56,117 @@ Additional Note
         ["armstrong", “even”] - if the number is an Armstrong number and even
         ["odd"] - if the number is not an Armstrong number but is odd
         [”even”] - if the number is not an Armstrong number but is even
+
+
+## How to deploy the API to AWS
+
+#### Create and activate virtual environment
+```
+python -m venv venv
+source venv/bin/activate 
+```
+
+### Install dependencies
+```
+pip install -r requirements.txt
+```
+
+### Create package directory
+```
+mkdir package
+```
+
+### Install dependencies in package directory
+```
+pip install --target ./package -r requirements.txt
+```
+
+### Copy lambda function to package
+```
+cp main.py package/
+```
+
+### Create deployment ZIP
+```
+cd package
+zip -r ../deployment.zip .
+cd ..
+```
+
+## Using AWS CLI
+
+### Create Lambda function
+```
+aws lambda create-function \
+    --function-name number-classifier \
+    --runtime python3.9 \
+    --handler lambda_function.handler \
+    --role arn:aws:iam::[YOUR-ACCOUNT-ID]:role/[YOUR-LAMBDA-ROLE] \
+    --zip-file fileb://deployment.zip \
+    --timeout 30 \
+    --memory-size 256
+```
+
+### For updates, use:
+
+```
+aws lambda update-function-code \
+    --function-name number-classifier \
+    --zip-file fileb://deployment.zip
+
+    Set up API Gateway:
+```
+
+### Create API
+
+```
+aws apigateway create-rest-api \
+    --name "Number-Classifier-API" \
+    --description "Number Classification API"
+```
+
+### Get API ID
+```
+API_ID=$(aws apigateway get-rest-apis --query "items[?name=='Number-Classifier-API'].id" --output text)
+```
+
+### Get root resource ID
+```
+ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $API_ID --query "items[?path=='/'].id" --output text)
+```
+### Create resource
+```
+aws apigateway create-resource \
+    --rest-api-id $API_ID \
+    --parent-id $ROOT_RESOURCE_ID \
+    --path-part "api"
+```
+
+### Create method
+```
+aws apigateway put-method \
+    --rest-api-id $API_ID \
+    --resource-id $RESOURCE_ID \
+    --http-method GET \
+    --authorization-type NONE
+```
+
+### Create integration
+```
+aws apigateway put-integration \
+    --rest-api-id $API_ID \
+    --resource-id $RESOURCE_ID \
+    --http-method GET \
+    --type AWS_PROXY \
+    --integration-http-method POST \
+    --uri arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations
+```
+## Deploy the API:
+
+### Create deployment
+```
+aws apigateway create-deployment \
+    --rest-api-id $API_ID \
+    --stage-name prod
+``` 
+
